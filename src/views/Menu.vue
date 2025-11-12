@@ -129,9 +129,22 @@ const currentDishes = computed(() => {
     return allDishes.value
   }
 
-  // category_id 字段实际存储的是分类名称
-  const categoryName = categories.value[activeCategory.value]?.name
-  return allDishes.value.filter(dish => dish.category_id === categoryName)
+  // 获取当前选中分类的 ID
+  const categoryId = categories.value[activeCategory.value]?.id
+
+  // category_id 是单向关联字段，格式为数组 ["recXXX"]
+  // 需要检查数组中是否包含当前分类的 ID
+  return allDishes.value.filter(dish => {
+    if (!dish.category_id) return false
+
+    // 如果是数组格式
+    if (Array.isArray(dish.category_id)) {
+      return dish.category_id.includes(categoryId)
+    }
+
+    // 兼容旧格式（文本类型）
+    return dish.category_id === categoryId
+  })
 })
 
 // 加载数据
