@@ -136,24 +136,22 @@ const handleCheckout = async () => {
     const result = await createOrder(orderData)
 
     if (result.success) {
+      // 立即跳转到订单成功页，避免先显示空购物车
+      await router.push({
+        name: 'OrderSuccess',
+        query: {
+          orderNo: orderData.order_no,
+          amount: orderData.total_amount
+        }
+      })
+
+      // 跳转成功后再清空购物车
+      cartStore.clearCart()
+
       showToast({
         message: '下单成功',
         position: 'top'
       })
-
-      // 清空购物车
-      cartStore.clearCart()
-
-      // 跳转到订单成功页
-      setTimeout(() => {
-        router.push({
-          name: 'OrderSuccess',
-          query: {
-            orderNo: orderData.order_no,
-            amount: orderData.total_amount
-          }
-        })
-      }, 500)
     } else {
       showToast({
         message: result.message || '下单失败',
