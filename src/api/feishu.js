@@ -10,7 +10,8 @@ const TABLES = {
   ANNOUNCEMENTS: import.meta.env.VITE_FEISHU_ANNOUNCEMENTS_TABLE_ID,
   CATEGORIES: import.meta.env.VITE_FEISHU_CATEGORIES_TABLE_ID,
   DISHES: import.meta.env.VITE_FEISHU_DISHES_TABLE_ID,
-  ORDERS: import.meta.env.VITE_FEISHU_ORDERS_TABLE_ID
+  ORDERS: import.meta.env.VITE_FEISHU_ORDERS_TABLE_ID,
+  ORDER_DETAILS: import.meta.env.VITE_FEISHU_ORDER_DETAILS_TABLE_ID
 }
 
 // 获取tenant_access_token
@@ -336,6 +337,46 @@ export async function createOrder(orderData) {
     return {
       success: false,
       message: '创建订单失败,请稍后重试'
+    }
+  }
+}
+
+// 创建订单详情(批量)
+export async function createOrderDetails(orderNo, dishesDetail) {
+  try {
+    // 为每个菜品创建一条订单详情记录
+    const promises = dishesDetail.map(dish => {
+      return createRecord(TABLES.ORDER_DETAILS, {
+        order_no: orderNo,
+        dishe_name: dish.菜品名称,
+        dishe_price: dish.单价,
+        dishe_quantity: dish.数量,
+        dishe_subtotal: dish.小计
+      })
+    })
+
+    // 并发执行所有创建请求
+    const results = await Promise.all(promises)
+
+    // 检查是否所有记录都创建成功
+    const allSuccess = results.every(result => result.code === 0)
+
+    if (allSuccess) {
+      return {
+        success: true,
+        message: `成功创建 ${results.length} 条订单详情`
+      }
+    } else {
+      return {
+        success: false,
+        message: '部分订单详情创建失败'
+      }
+    }
+  } catch (error) {
+    console.error('创建订单详情失败:', error)
+    return {
+      success: false,
+      message: '创建订单详情失败,请稍后重试'
     }
   }
 }

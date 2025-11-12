@@ -70,7 +70,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { useUserStore } from '@/stores/user'
-import { createOrder } from '@/api/feishu'
+import { createOrder, createOrderDetails } from '@/api/feishu'
 import { showToast, showConfirmDialog } from 'vant'
 
 const router = useRouter()
@@ -134,6 +134,12 @@ const handleCheckout = async () => {
     const result = await createOrder(orderData)
 
     if (result.success) {
+      // 创建订单详情记录(异步执行,不阻塞主流程)
+      createOrderDetails(orderData.order_no, orderData.dishes_detail).catch(error => {
+        console.error('订单详情写入失败:', error)
+        // 订单详情写入失败不影响主流程,仅记录日志
+      })
+
       // 立即跳转到订单成功页，避免先显示空购物车
       await router.push({
         name: 'OrderSuccess',
