@@ -84,10 +84,20 @@ const goBack = () => {
 // 解析订单商品详情
 const parseOrderItems = (dishesDetail) => {
   try {
+    let items = []
     if (typeof dishesDetail === 'string') {
-      return JSON.parse(dishesDetail)
+      items = JSON.parse(dishesDetail)
+    } else {
+      items = dishesDetail || []
     }
-    return dishesDetail || []
+
+    // 统一字段格式，兼容中文和英文字段名
+    return items.map(item => ({
+      name: item.菜品名称 || item.name || '',
+      price: item.单价 || item.price || 0,
+      quantity: item.数量 || item.quantity || 0,
+      subtotal: item.小计 || item.subtotal || 0
+    }))
   } catch (error) {
     console.error('解析订单商品失败:', error)
     return []

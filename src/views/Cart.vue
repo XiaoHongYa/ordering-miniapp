@@ -125,10 +125,10 @@ const handleCheckout = async () => {
       total_amount: cartStore.totalAmount,
       total_quantity: cartStore.totalCount,
       dishes_detail: cartStore.items.map(item => ({
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-        subtotal: item.price * item.quantity
+        菜品名称: item.name,
+        单价: item.price,
+        数量: item.quantity,
+        小计: item.price * item.quantity
       }))
     }
 
@@ -198,7 +198,6 @@ const handleCheckout = async () => {
 
 .cart-item {
   display: flex;
-  align-items: center;
   gap: 12px;
   padding: 15px;
   margin-bottom: 10px;
@@ -225,6 +224,9 @@ const handleCheckout = async () => {
 .item-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .item-name {
@@ -232,9 +234,10 @@ const handleCheckout = async () => {
   font-weight: bold;
   color: #333;
   margin-bottom: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 允许换行显示完整名称 */
+  word-wrap: break-word;
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .item-price {
@@ -244,15 +247,17 @@ const handleCheckout = async () => {
 
 .item-actions {
   flex-shrink: 0;
+  align-self: flex-end;
 }
 
 .item-total {
-  width: 80px;
+  width: 70px;
   text-align: right;
   font-size: 16px;
   font-weight: bold;
   color: #ff6b6b;
   flex-shrink: 0;
+  align-self: flex-end;
 }
 
 .checkout-bar {
