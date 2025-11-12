@@ -367,7 +367,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 20px 0 20px;
+  padding-right: 12px;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   cursor: pointer;
