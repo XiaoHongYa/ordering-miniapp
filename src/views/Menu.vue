@@ -367,8 +367,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px 0 20px;
-  padding-right: 12px;
+  padding: 0 22px 0 20px;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   cursor: pointer;
@@ -398,7 +397,8 @@ onMounted(() => {
 }
 
 .cart-button {
-  min-width: 100px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media screen and (max-width: 600px) {
