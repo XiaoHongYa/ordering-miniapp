@@ -29,19 +29,17 @@
 
           <div class="item-info">
             <div class="item-name">{{ item.name }}</div>
-            <div class="item-price">¥{{ item.price.toFixed(2) }}</div>
-          </div>
-
-          <div class="item-actions">
-            <van-stepper
-              v-model="item.quantity"
-              min="0"
-              @change="handleQuantityChange(item)"
-            />
-          </div>
-
-          <div class="item-total">
-            ¥{{ (item.price * item.quantity).toFixed(2) }}
+            <div class="item-footer">
+              <div class="item-price">¥{{ item.price.toFixed(2) }}</div>
+              <div class="item-controls">
+                <van-stepper
+                  v-model="item.quantity"
+                  min="0"
+                  @change="handleQuantityChange(item)"
+                />
+                <div class="item-total">¥{{ (item.price * item.quantity).toFixed(2) }}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -226,38 +224,45 @@ const handleCheckout = async () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 8px;
 }
 
 .item-name {
   font-size: 15px;
   font-weight: bold;
   color: #333;
-  margin-bottom: 8px;
   /* 允许换行显示完整名称 */
   word-wrap: break-word;
   word-break: break-all;
   line-height: 1.4;
 }
 
+.item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
 .item-price {
   font-size: 14px;
   color: #ff6b6b;
+  flex-shrink: 0;
 }
 
-.item-actions {
+.item-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
-  align-self: flex-end;
 }
 
 .item-total {
-  width: 70px;
-  text-align: right;
   font-size: 16px;
   font-weight: bold;
   color: #ff6b6b;
-  flex-shrink: 0;
-  align-self: flex-end;
+  min-width: 60px;
+  text-align: right;
 }
 
 .checkout-bar {
