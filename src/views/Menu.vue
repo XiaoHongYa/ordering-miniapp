@@ -125,12 +125,17 @@ const refreshing = ref(false)
 
 // 当前分类的菜品
 const currentDishes = computed(() => {
-  if (activeCategory.value === 0 || categories.value.length === 0) {
+  if (categories.value.length === 0) {
     return allDishes.value
   }
 
   // 获取当前选中分类的 ID
   const categoryId = categories.value[activeCategory.value]?.id
+
+  // 如果 categoryId 为 null（即选中了"全部"），返回所有菜品
+  if (!categoryId) {
+    return allDishes.value
+  }
 
   // category_id 是单向关联字段，格式为数组 ["recXXX"]
   // 需要检查数组中是否包含当前分类的 ID
@@ -160,7 +165,11 @@ const loadData = async () => {
     ])
 
     announcements.value = announcementsData
-    categories.value = categoriesData
+    // 在分类列表前面添加"全部"选项
+    categories.value = [
+      { id: null, name: '全部', sort_order: 0 },
+      ...categoriesData
+    ]
     allDishes.value = dishesData
   } catch (error) {
     showToast({
