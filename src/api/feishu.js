@@ -47,6 +47,11 @@ async function getTenantAccessToken() {
 function parseFieldValue(value) {
   if (!value) return null
 
+  // 单向关联/双向关联字段: {"link_record_ids": ["recXXX"]}
+  if (typeof value === 'object' && value.link_record_ids) {
+    return value.link_record_ids
+  }
+
   // 如果是数组格式 [{"text":"xxx","type":"text"}]
   if (Array.isArray(value) && value.length > 0) {
     if (value[0].text !== undefined) {
@@ -231,6 +236,27 @@ export async function getCategories() {
 // 获取菜品列表
 export async function getDishes(categoryName) {
   try {
+    // 如果指定了分类名称，需要先查找分类 ID
+    let categoryRecordId = null
+    if (categoryName) {
+      const categoryResponse = await searchRecords(TABLES.CATEGORIES, {
+        filter: {
+          conjunction: 'and',
+          conditions: [
+            {
+              field_name: 'name',
+              operator: 'is',
+              value: [categoryName]
+            }
+          ]
+        }
+      })
+
+      if (categoryResponse.code === 0 && categoryResponse.data?.items?.length > 0) {
+        categoryRecordId = categoryResponse.data.items[0].record_id
+      }
+    }
+
     const conditions = [
       {
         field_name: 'status',
@@ -239,13 +265,13 @@ export async function getDishes(categoryName) {
       }
     ]
 
-    // 如果指定了分类,添加分类过滤条件
-    // 注意: category_id 字段实际存储的是分类名称,不是ID
-    if (categoryName) {
+    // 如果找到了分类 ID，添加过滤条件
+    // category_id 是单向关联字段，需要使用 contains 操作符
+    if (categoryRecordId) {
       conditions.push({
         field_name: 'category_id',
-        operator: 'is',
-        value: [categoryName]
+        operator: 'contains',
+        value: [categoryRecordId]
       })
     }
 
@@ -271,7 +297,7 @@ export async function getDishes(categoryName) {
           description: parsed.description,
           price: parsed.price,
           image_url: parsed.image_url,
-          category_id: parsed.category_id
+          category_id: parsed.category_id // 现在是数组格式 ["recXXX"]
         }
       }) || []
     }
