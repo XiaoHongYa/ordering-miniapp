@@ -22,10 +22,6 @@ pages_build_output_dir = "dist"
 [build]
 command = "npm run build"
 
-# 可选: 兼容性标志
-[compatibility_flags]
-# nodejs_compat = true  # 如果需要 Node.js 兼容性
-
 # 注意事项:
 # 1. HEIC 图片转换功能在 Cloudflare Workers 中受限
 #    - Cloudflare Workers 不支持 heic-convert 库 (需要原生模块)
