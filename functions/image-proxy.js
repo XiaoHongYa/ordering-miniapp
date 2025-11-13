@@ -5,13 +5,13 @@
 let cachedToken = null
 let tokenExpireTime = 0
 
-// 请求队列控制 - 允许适度并发,平衡速度和频率限制
+// 请求队列控制 - 严格限制并发,避免触发频率限制
 let activeRequests = 0
-const MAX_CONCURRENT_REQUESTS = 3  // 允许3个并发请求
+const MAX_CONCURRENT_REQUESTS = 1  // 只允许1个并发请求(串行处理)
 const requestQueue = []
 
 // 请求间延迟(毫秒) - 每个请求执行前都要等待,确保不会触发频率限制
-const REQUEST_DELAY = 400  // 每个请求开始前等待400ms
+const REQUEST_DELAY = 1000  // 每个请求开始前等待1秒
 
 // 获取 tenant_access_token（带缓存）
 async function getTenantAccessToken(env) {
@@ -71,72 +71,6 @@ function releaseSlot() {
   }
 }
 
-// HEIC 转 JPEG (使用 Cloudflare 的 Image Resizing)
-// 注意: 需要在 Cloudflare 开启 Image Resizing 功能（付费功能）
-// 免费替代方案: 直接返回原始 HEIC，让客户端处理（iOS支持，但Web浏览器不支持）
-async function convertHeicToJpeg(imageBuffer) {
-  // Cloudflare Workers 环境没有 heic-convert 库
-  // 这里需要使用 Cloudflare 的 Image Resizing API
-  // 或者返回原始图片，前端处理
-
-  // 简化方案：直接返回原始图片，对于 HEIC 图片，提示用户
-  // 如果需要转换，可以考虑：
-  // 1. 使用 Cloudflare Image Resizing (需要付费)
-  // 2. 使用第三方 API 转换
-  // 3. 前端使用 heic2any 库转换
-
-  console.log('HEIC format detected, returning original image')
-  return { buffer: imageBuffer, contentType: 'image/jpeg' }
-}
-
-// 下载图片（带重试和队列控制）
-async function downloadImage(fileToken, env, maxRetries = 3) {
-  // 等待队列空位
-  await waitForSlot()
-
-  try {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        // 每个请求开始前都等待固定时间,避免频率限制
-        await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY))
-
-        const token = await getTenantAccessToken(env)
-
-        const imageResponse = await fetch(
-          `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        )
-
-        if (!imageResponse.ok) {
-          throw new Error(`HTTP ${imageResponse.status}`)
-        }
-
-        return imageResponse
-
-      } catch (error) {
-        const isLastAttempt = attempt === maxRetries
-
-        // 如果是最后一次尝试，抛出错误
-        if (isLastAttempt) {
-          throw error
-        }
-
-        // 指数退避
-        const delay = attempt * 500
-        console.log(`下载失败 (尝试 ${attempt}/${maxRetries}), ${delay}ms 后重试...`)
-        await new Promise(resolve => setTimeout(resolve, delay))
-      }
-    }
-  } finally {
-    // 无论成功失败，都要释放队列空位
-    releaseSlot()
-  }
-}
-
 // Cloudflare Pages Function 导出
 export async function onRequest(context) {
   const { request, env } = context
@@ -184,38 +118,21 @@ export async function onRequest(context) {
   console.log('Environment Debug:', JSON.stringify(debugInfo, null, 2))
 
   try {
+    // 等待队列空位 - 确保串行处理
+    await waitForSlot()
+    console.log('Queue slot acquired, active requests:', activeRequests)
+
+    // 添加延迟避免频率限制
+    await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY))
+
     console.log('Step 1: Getting tenant access token...')
 
-    // 简化版本：直接获取 token，不使用缓存
-    const tokenResponse = await fetch(
-      'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          app_id: env.VITE_FEISHU_APP_ID,
-          app_secret: env.VITE_FEISHU_APP_SECRET
-        })
-      }
-    )
-
-    console.log('Token response status:', tokenResponse.status)
-    const tokenData = await tokenResponse.json()
-    console.log('Token response:', JSON.stringify(tokenData, null, 2))
-
-    if (tokenData.code !== 0) {
-      throw new Error(`Failed to get token: ${tokenData.msg || 'Unknown error'}`)
-    }
-
-    const token = tokenData.tenant_access_token
+    // 使用缓存的 token
+    const token = await getTenantAccessToken(env)
     console.log('Step 2: Got token (preview):', token.substring(0, 20) + '...')
     console.log('Step 2: Downloading image with file_token:', fileToken)
 
     // 尝试使用飞书附件下载 API
-    // 飞书有两个下载接口:
-    // 1. /drive/v1/medias/${file_token}/download - 用于下载上传的附件
-    // 2. /drive/v1/files/${file_token}/download - 用于下载云文档中的文件
-    // 我们先尝试 medias 接口
     const downloadUrl = `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`
     console.log('Step 2: Download URL:', downloadUrl)
 
@@ -228,8 +145,6 @@ export async function onRequest(context) {
 
     console.log('Step 2: Image response status:', imageResponse.status)
     console.log('Step 2: Image response headers:', JSON.stringify(Object.fromEntries(imageResponse.headers.entries()), null, 2))
-
-    console.log('Image response status:', imageResponse.status)
 
     if (!imageResponse.ok) {
       // 如果下载失败,尝试读取错误响应内容
@@ -268,6 +183,9 @@ export async function onRequest(context) {
     console.log('Step 4: Returning image successfully')
     console.log('=== Image Proxy Request Completed ===')
 
+    // 释放队列空位
+    releaseSlot()
+
     // 返回图片（直接传递响应）
     return new Response(imageResponse.body, {
       status: 200,
@@ -275,6 +193,8 @@ export async function onRequest(context) {
     })
 
   } catch (error) {
+    // 释放队列空位
+    releaseSlot()
     console.error('=== Error in image-proxy ===')
     console.error('Error message:', error.message)
     console.error('Error stack:', error.stack)

@@ -125,8 +125,8 @@ class ImageQueue {
 
 // 创建全局单例
 const imageQueue = new ImageQueue({
-  maxConcurrent: 3, // 同时最多3个请求
-  delayBetweenRequests: 500 // 每个请求间隔500ms
+  maxConcurrent: 2, // 同时最多2个请求
+  delayBetweenRequests: 800 // 每个请求间隔800ms
 })
 
 export default imageQueue
