@@ -173,25 +173,21 @@ export async function onRequest(context) {
     // 获取图片的内容类型
     const originalContentType = imageResponse.headers.get('content-type') || 'image/jpeg'
 
-    // 对于 HEIC 格式，Cloudflare Workers 不支持转换
-    // 检测到 HEIC 格式时，返回友好的错误提示
+    // 对于 HEIC 格式，返回原始图片数据，让前端使用 heic2any 转换
+    // 添加特殊标记头，告诉前端这是 HEIC 格式需要转换
     if (originalContentType.includes('heic') || originalContentType.includes('heif')) {
-      console.log('HEIC format detected - Cloudflare Workers cannot convert')
+      console.log('HEIC format detected - returning raw data for frontend conversion')
 
-      return new Response(
-        JSON.stringify({
-          error: 'HEIC format not supported',
-          message: 'Please upload JPEG/PNG format images in Feishu Bitable',
-          file_token: fileToken
-        }),
-        {
-          status: 415, // Unsupported Media Type
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-          }
+      return new Response(imageResponse.body, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/heic', // 明确标记为 HEIC
+          'X-Image-Format': 'heic', // 自定义头，方便前端识别
+          'Cache-Control': 'public, max-age=2592000, immutable', // 缓存30天
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'X-Image-Format' // 允许前端读取自定义头
         }
-      )
+      })
     }
 
     let contentType = originalContentType

@@ -241,30 +241,24 @@ const handleImageError = async (event, dish) => {
     failedImages.value.add(dish.id)
     console.log(`图片加载失败: ${dish.name}, URL: ${currentSrc}`)
 
-    // 如果是通过代理函数加载的图片（Netlify 或 Cloudflare），
-    // 服务器端应该已经处理了 HEIC 转换，不需要前端再转换
-    const isProxiedImage = currentSrc.includes('image-proxy') ||
-                          currentSrc.includes('feishu-image-proxy')
+    // 尝试 HEIC 转换（无论是否是代理图片）
+    // 因为 Cloudflare image-proxy 会返回 HEIC 原始数据，需要前端转换
+    try {
+      console.log(`尝试 HEIC 转换: ${dish.name}`)
+      const convertedUrl = await loadImage(currentSrc)
 
-    // 只有在非代理图片且明确失败时才尝试 HEIC 转换
-    if (!isProxiedImage) {
-      try {
-        console.log(`尝试 HEIC 转换: ${dish.name}`)
-        const convertedUrl = await loadImage(currentSrc)
-
-        if (convertedUrl && convertedUrl !== currentSrc) {
-          // 转换成功，更新图片
-          event.target.src = convertedUrl
-          convertedImageUrls.value.set(currentSrc, convertedUrl)
-          console.log(`✅ HEIC 转换成功: ${dish.name}`)
-          return
-        }
-      } catch (error) {
-        console.warn(`HEIC 转换失败: ${dish.name}`, error)
+      if (convertedUrl && convertedUrl !== currentSrc) {
+        // 转换成功，更新图片
+        event.target.src = convertedUrl
+        convertedImageUrls.value.set(currentSrc, convertedUrl)
+        console.log(`✅ HEIC 转换成功: ${dish.name}`)
+        return
       }
+    } catch (error) {
+      console.warn(`HEIC 转换失败: ${dish.name}`, error)
     }
 
-    // HEIC 转换失败或不是 HEIC 格式，尝试备用图片
+    // HEIC 转换失败，尝试备用图片
     if (dish.image_url_v2 && event.target.src.indexOf(dish.image_url_v2) === -1) {
       console.log(`切换到备用图片: ${dish.name}`)
       event.target.src = dish.image_url_v2
