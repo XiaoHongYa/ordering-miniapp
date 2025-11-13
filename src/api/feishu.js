@@ -25,7 +25,7 @@ async function getTenantAccessToken() {
   }
 
   try {
-    const response = await request.post('/open-apis/auth/v3/tenant_access_token/internal', {
+    const response = await request.post('/auth/v3/tenant_access_token/internal', {
       app_id: APP_ID,
       app_secret: APP_SECRET
     })
@@ -98,7 +98,7 @@ async function searchRecords(tableId, params = {}) {
   const token = await getTenantAccessToken()
 
   const response = await request.post(
-    `/open-apis/bitable/v1/apps/${APP_TOKEN}/tables/${tableId}/records/search`,
+    `/bitable/v1/apps/${APP_TOKEN}/tables/${tableId}/records/search`,
     params,
     {
       headers: {
@@ -116,7 +116,7 @@ async function createRecord(tableId, fields) {
   const token = await getTenantAccessToken()
 
   const response = await request.post(
-    `/open-apis/bitable/v1/apps/${APP_TOKEN}/tables/${tableId}/records`,
+    `/bitable/v1/apps/${APP_TOKEN}/tables/${tableId}/records`,
     { fields },
     {
       headers: {
