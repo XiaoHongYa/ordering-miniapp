@@ -38,3 +38,6 @@ dist-ssr
 部署完成总结.md
 项目完成总结.md
 飞书Wiki权限配置指南.md
+
+# Local Netlify folder
+.netlify
