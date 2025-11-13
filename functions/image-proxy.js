@@ -141,6 +141,11 @@ async function downloadImage(fileToken, env, maxRetries = 3) {
 export async function onRequest(context) {
   const { request, env } = context
 
+  // 调试：记录请求开始
+  console.log('=== Image Proxy Request Started ===')
+  console.log('URL:', request.url)
+  console.log('Method:', request.method)
+
   // 只允许 GET 请求
   if (request.method !== 'GET') {
     return new Response(
@@ -156,6 +161,8 @@ export async function onRequest(context) {
   const url = new URL(request.url)
   const fileToken = url.searchParams.get('file_token')
 
+  console.log('File Token:', fileToken)
+
   if (!fileToken) {
     return new Response(
       JSON.stringify({ error: 'Missing file_token parameter' }),
@@ -166,12 +173,62 @@ export async function onRequest(context) {
     )
   }
 
+  // 调试：检查环境变量
+  const debugInfo = {
+    hasAppId: !!env.VITE_FEISHU_APP_ID,
+    hasAppSecret: !!env.VITE_FEISHU_APP_SECRET,
+    appIdLength: env.VITE_FEISHU_APP_ID?.length || 0,
+    appSecretLength: env.VITE_FEISHU_APP_SECRET?.length || 0,
+    allEnvKeys: Object.keys(env || {})
+  }
+  console.log('Environment Debug:', JSON.stringify(debugInfo, null, 2))
+
   try {
-    // 下载附件（带重试）
-    const imageResponse = await downloadImage(fileToken, env)
+    console.log('Step 1: Getting tenant access token...')
+
+    // 简化版本：直接获取 token，不使用缓存
+    const tokenResponse = await fetch(
+      'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          app_id: env.VITE_FEISHU_APP_ID,
+          app_secret: env.VITE_FEISHU_APP_SECRET
+        })
+      }
+    )
+
+    console.log('Token response status:', tokenResponse.status)
+    const tokenData = await tokenResponse.json()
+    console.log('Token response:', JSON.stringify(tokenData, null, 2))
+
+    if (tokenData.code !== 0) {
+      throw new Error(`Failed to get token: ${tokenData.msg || 'Unknown error'}`)
+    }
+
+    const token = tokenData.tenant_access_token
+    console.log('Step 2: Got token, downloading image...')
+
+    // 下载附件
+    const imageResponse = await fetch(
+      `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    )
+
+    console.log('Image response status:', imageResponse.status)
+
+    if (!imageResponse.ok) {
+      throw new Error(`HTTP ${imageResponse.status}: ${imageResponse.statusText}`)
+    }
 
     // 获取图片的内容类型
     const originalContentType = imageResponse.headers.get('content-type') || 'image/jpeg'
+    console.log('Step 3: Got image, content-type:', originalContentType)
 
     // 创建新的响应头
     const responseHeaders = new Headers({
@@ -190,6 +247,9 @@ export async function onRequest(context) {
       responseHeaders.set('Content-Type', originalContentType)
     }
 
+    console.log('Step 4: Returning image successfully')
+    console.log('=== Image Proxy Request Completed ===')
+
     // 返回图片（直接传递响应）
     return new Response(imageResponse.body, {
       status: 200,
@@ -197,15 +257,29 @@ export async function onRequest(context) {
     })
 
   } catch (error) {
-    console.error('Error proxying image:', error.message, error.stack)
+    console.error('=== Error in image-proxy ===')
+    console.error('Error message:', error.message)
+    console.error('Error stack:', error.stack)
+
+    // 返回详细的错误信息（包含环境变量状态）
+    const errorResponse = {
+      error: 'Failed to proxy image',
+      message: error.message,
+      stack: error.stack,
+      fileToken: fileToken,
+      debug: {
+        hasEnv: !!env,
+        hasAppId: !!env?.VITE_FEISHU_APP_ID,
+        hasAppSecret: !!env?.VITE_FEISHU_APP_SECRET,
+        appIdPreview: env?.VITE_FEISHU_APP_ID?.substring(0, 8) + '...',
+        envKeys: Object.keys(env || {})
+      }
+    }
+
+    console.error('Error response:', JSON.stringify(errorResponse, null, 2))
 
     return new Response(
-      JSON.stringify({
-        error: 'Failed to proxy image',
-        message: error.message,
-        stack: error.stack,
-        fileToken: fileToken
-      }),
+      JSON.stringify(errorResponse),
       {
         status: 500,
         headers: {
