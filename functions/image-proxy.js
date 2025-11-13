@@ -152,63 +152,59 @@ export async function onRequest(context) {
     )
   }
 
+  // 从查询参数中获取 file_token
+  const url = new URL(request.url)
+  const fileToken = url.searchParams.get('file_token')
+
+  if (!fileToken) {
+    return new Response(
+      JSON.stringify({ error: 'Missing file_token parameter' }),
+      {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    )
+  }
+
   try {
-    // 从查询参数中获取 file_token
-    const url = new URL(request.url)
-    const fileToken = url.searchParams.get('file_token')
-
-    if (!fileToken) {
-      return new Response(
-        JSON.stringify({ error: 'Missing file_token parameter' }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
-    }
-
     // 下载附件（带重试）
     const imageResponse = await downloadImage(fileToken, env)
 
     // 获取图片的内容类型
     const originalContentType = imageResponse.headers.get('content-type') || 'image/jpeg'
 
+    // 创建新的响应头
+    const responseHeaders = new Headers({
+      'Cache-Control': 'public, max-age=2592000, immutable', // 缓存30天
+      'Access-Control-Allow-Origin': '*'
+    })
+
     // 对于 HEIC 格式，返回原始图片数据，让前端使用 heic2any 转换
-    // 添加特殊标记头，告诉前端这是 HEIC 格式需要转换
     if (originalContentType.includes('heic') || originalContentType.includes('heif')) {
       console.log('HEIC format detected - returning raw data for frontend conversion')
 
-      return new Response(imageResponse.body, {
-        status: 200,
-        headers: {
-          'Content-Type': 'image/heic', // 明确标记为 HEIC
-          'X-Image-Format': 'heic', // 自定义头，方便前端识别
-          'Cache-Control': 'public, max-age=2592000, immutable', // 缓存30天
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Expose-Headers': 'X-Image-Format' // 允许前端读取自定义头
-        }
-      })
+      responseHeaders.set('Content-Type', 'image/heic')
+      responseHeaders.set('X-Image-Format', 'heic')
+      responseHeaders.set('Access-Control-Expose-Headers', 'X-Image-Format')
+    } else {
+      responseHeaders.set('Content-Type', originalContentType)
     }
 
-    let contentType = originalContentType
-
-    // 返回图片
+    // 返回图片（直接传递响应）
     return new Response(imageResponse.body, {
       status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=2592000, immutable', // 缓存30天
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers: responseHeaders
     })
 
   } catch (error) {
-    console.error('Error proxying image:', error.message)
+    console.error('Error proxying image:', error.message, error.stack)
 
     return new Response(
       JSON.stringify({
         error: 'Failed to proxy image',
-        message: error.message
+        message: error.message,
+        stack: error.stack,
+        fileToken: fileToken
       }),
       {
         status: 500,
