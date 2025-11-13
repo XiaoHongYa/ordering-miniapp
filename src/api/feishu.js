@@ -54,9 +54,13 @@ function parseFieldValue(value) {
   }
 
   // 附件字段: [{"file_token":"xxx","name":"xxx","size":123,"tmp_url":"xxx","type":"xxx","url":"xxx"}]
-  // 对于附件字段，返回第一个附件的临时URL
+  // 返回file_token，前端会用它来构建下载URL
   if (Array.isArray(value) && value.length > 0 && value[0].file_token) {
-    return value[0].tmp_url || value[0].url
+    return {
+      file_token: value[0].file_token,
+      name: value[0].name,
+      type: value[0].type
+    }
   }
 
   // 如果是数组格式 [{"text":"xxx","type":"text"}]
@@ -72,7 +76,7 @@ function parseFieldValue(value) {
     return value.text
   }
 
-  // 其他情况直接返回
+  // 其他情况直接返回（文本字段直接返回文本内容）
   return value
 }
 
@@ -298,13 +302,21 @@ export async function getDishes(categoryName) {
     if (response.code === 0) {
       return response.data?.items?.map(item => {
         const parsed = parseRecord(item)
+
+        // 处理附件字段：如果image_url_v2是对象（包含file_token），使用Netlify代理函数
+        let imageUrlV2 = null
+        if (parsed.image_url_v2 && typeof parsed.image_url_v2 === 'object' && parsed.image_url_v2.file_token) {
+          // 使用 Netlify 函数代理飞书附件下载（需要认证）
+          imageUrlV2 = `/.netlify/functions/feishu-image-proxy?file_token=${parsed.image_url_v2.file_token}`
+        }
+
         return {
           id: parsed.id,
           name: parsed.name,
           description: parsed.description,
           price: parsed.price,
           image_url: parsed.image_url,
-          image_url_v2: parsed.image_url_v2, // 附件字段作为备用图片
+          image_url_v2: imageUrlV2, // 附件字段作为备用图片
           category_id: parsed.category_id // 现在是数组格式 ["recXXX"]
         }
       }) || []
