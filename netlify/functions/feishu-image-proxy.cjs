@@ -1,6 +1,80 @@
 // Netlify Function: 代理飞书附件图片下载
 const axios = require('axios')
 
+// Token 缓存（Lambda 容器复用时可以共享）
+let cachedToken = null
+let tokenExpireTime = 0
+
+// 获取 tenant_access_token（带缓存）
+async function getTenantAccessToken() {
+  const now = Date.now()
+
+  // 如果 token 还有效（提前 5 分钟过期），直接返回
+  if (cachedToken && now < tokenExpireTime - 5 * 60 * 1000) {
+    return cachedToken
+  }
+
+  // 获取新 token
+  const tokenResponse = await axios.post(
+    'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+    {
+      app_id: process.env.VITE_FEISHU_APP_ID,
+      app_secret: process.env.VITE_FEISHU_APP_SECRET
+    }
+  )
+
+  if (tokenResponse.data.code !== 0) {
+    throw new Error('Failed to get tenant_access_token')
+  }
+
+  cachedToken = tokenResponse.data.tenant_access_token
+  // Token 有效期 2 小时
+  tokenExpireTime = now + 2 * 60 * 60 * 1000
+
+  return cachedToken
+}
+
+// 下载图片（带重试）
+async function downloadImage(fileToken, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const token = await getTenantAccessToken()
+
+      const imageResponse = await axios.get(
+        `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          responseType: 'arraybuffer',
+          timeout: 10000 // 10秒超时
+        }
+      )
+
+      return imageResponse
+
+    } catch (error) {
+      const isLastAttempt = attempt === maxRetries
+      const status = error.response?.status
+
+      // 如果是 400/401/403/404 错误，不重试（这些是永久错误）
+      if (status === 400 || status === 401 || status === 403 || status === 404) {
+        throw error
+      }
+
+      // 如果是最后一次尝试，抛出错误
+      if (isLastAttempt) {
+        throw error
+      }
+
+      // 指数退避：等待 attempt * 500ms 后重试
+      const delay = attempt * 500
+      console.log(`下载失败 (尝试 ${attempt}/${maxRetries}), ${delay}ms 后重试...`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+}
+
 exports.handler = async function(event, context) {
   // 只允许 GET 请求
   if (event.httpMethod !== 'GET') {
@@ -21,31 +95,8 @@ exports.handler = async function(event, context) {
       }
     }
 
-    // 获取 tenant_access_token
-    const tokenResponse = await axios.post(
-      'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
-      {
-        app_id: process.env.VITE_FEISHU_APP_ID,
-        app_secret: process.env.VITE_FEISHU_APP_SECRET
-      }
-    )
-
-    if (tokenResponse.data.code !== 0) {
-      throw new Error('Failed to get tenant_access_token')
-    }
-
-    const token = tokenResponse.data.tenant_access_token
-
-    // 下载附件
-    const imageResponse = await axios.get(
-      `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        responseType: 'arraybuffer'
-      }
-    )
+    // 下载附件（带重试）
+    const imageResponse = await downloadImage(fileToken)
 
     // 获取图片的内容类型
     const contentType = imageResponse.headers['content-type'] || 'image/jpeg'
@@ -64,6 +115,15 @@ exports.handler = async function(event, context) {
   } catch (error) {
     console.error('Error proxying image:', error.message)
 
+    // 记录更详细的错误信息
+    if (error.response) {
+      console.error('Feishu API Error:', {
+        status: error.response.status,
+        data: error.response.data,
+        fileToken: event.queryStringParameters.file_token
+      })
+    }
+
     return {
       statusCode: 500,
       headers: {
@@ -71,7 +131,8 @@ exports.handler = async function(event, context) {
       },
       body: JSON.stringify({
         error: 'Failed to proxy image',
-        message: error.message
+        message: error.message,
+        details: error.response?.data || null
       })
     }
   }

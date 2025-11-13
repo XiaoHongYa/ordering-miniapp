@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试菜品API</title>
+</head>
+<body>
+    <h1>测试菜品数据</h1>
+    <pre id="output"></pre>
+    
+    <script type="module">
+        // 模拟 import.meta.env
+        const env = {
+            VITE_FEISHU_APP_TOKEN: 'WcmNbFvM5aRWdVsegQZcLa9gnme',
+            VITE_FEISHU_APP_ID: 'cli_a69cf910e9f8500c',
+            VITE_FEISHU_APP_SECRET: 'vGYHSzdwKh21zBKcpQU5HfOJ4dGXEuxa',
+            VITE_FEISHU_DISHES_TABLE_ID: 'tbld6sMF5ufDqh8Q'
+        };
+
+        async function test() {
+            const output = document.getElementById('output');
+            
+            try {
+                // 使用开发服务器的代理
+                const response = await fetch('http://localhost:5173/.netlify/functions/feishu-proxy/open-apis/bitable/v1/apps/' + env.VITE_FEISHU_APP_TOKEN + '/tables/' + env.VITE_FEISHU_DISHES_TABLE_ID + '/records/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filter: {
+                            conjunction: 'and',
+                            conditions: [{
+                                field_name: 'status',
+                                operator: 'is',
+                                value: ['上架']
+                            }]
+                        },
+                        page_size: 3
+                    })
+                });
+
+                const data = await response.json();
+                output.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        test();
+    </script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试菜品图片加载</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .dish {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        .dish img {
+            width: 100px;
+            height: 100px;
+            object-fit: cover;
+            margin-right: 15px;
+            border: 1px solid #ccc;
+        }
+        .dish-info { flex: 1; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>测试菜品图片加载</h1>
+    <div id="output"></div>
+
+    <script type="module">
+        // 使用本地开发环境
+        const API_BASE = 'http://localhost:8888/.netlify/functions/feishu-proxy/open-apis'
+        const APP_TOKEN = 'WcmNbFvM5aRWdVsegQZcLa9gnme'
+        const DISHES_TABLE_ID = 'tbld6sMF5ufDqh8Q'
+
+        const output = document.getElementById('output')
+
+        try {
+            output.innerHTML = '<p>正在加载菜品...</p>'
+
+            const response = await fetch(`${API_BASE}/bitable/v1/apps/${APP_TOKEN}/tables/${DISHES_TABLE_ID}/records/search`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ page_size: 50 })
+            })
+
+            const data = await response.json()
+
+            if (data.code !== 0) {
+                throw new Error(data.msg || '获取数据失败')
+            }
+
+            output.innerHTML = '<h2>获取到 ' + data.data.items.length + ' 个菜品</h2>'
+
+            data.data.items.forEach(item => {
+                const fields = item.fields
+
+                // 解析菜品名称
+                let name = '(无名称)'
+                if (fields.name) {
+                    if (Array.isArray(fields.name) && fields.name[0]?.text) {
+                        name = fields.name[0].text
+                    } else if (typeof fields.name === 'string') {
+                        name = fields.name
+                    }
+                }
+
+                // 解析 image_url
+                let imageUrl = null
+                if (fields.image_url) {
+                    if (Array.isArray(fields.image_url) && fields.image_url[0]) {
+                        // URL类型字段
+                        imageUrl = fields.image_url[0].text || fields.image_url[0].link
+                    } else if (typeof fields.image_url === 'string') {
+                        imageUrl = fields.image_url
+                    }
+                }
+
+                // 解析 image_url_v2 (附件)
+                let imageUrlV2 = null
+                if (fields.image_url_v2 && Array.isArray(fields.image_url_v2) && fields.image_url_v2[0]?.file_token) {
+                    const fileToken = fields.image_url_v2[0].file_token
+                    imageUrlV2 = `/.netlify/functions/feishu-image-proxy?file_token=${fileToken}`
+                }
+
+                // 显示优先级: image_url -> image_url_v2 -> default
+                const finalImageUrl = imageUrl || imageUrlV2 || '/default-dish.png'
+
+                const dishDiv = document.createElement('div')
+                dishDiv.className = 'dish'
+                dishDiv.innerHTML = `
+                    <img src="${finalImageUrl}" alt="${name}" onerror="this.style.border='2px solid red'">
+                    <div class="dish-info">
+                        <h3>${name}</h3>
+                        <p><strong>image_url:</strong> ${imageUrl ? '<span class="success">' + imageUrl + '</span>' : '<span class="error">无</span>'}</p>
+                        <p><strong>image_url_v2:</strong> ${imageUrlV2 ? '<span class="success">' + imageUrlV2 + '</span>' : '<span class="error">无</span>'}</p>
+                        <p><strong>使用:</strong> ${finalImageUrl}</p>
+                    </div>
+                `
+                output.appendChild(dishDiv)
+            })
+
+        } catch (error) {
+            output.innerHTML = '<p class="error">错误: ' + error.message + '</p>'
+            console.error(error)
+        }
+    </script>
+</body>
+</html>
