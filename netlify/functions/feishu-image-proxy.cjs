@@ -5,13 +5,13 @@ const axios = require('axios')
 let cachedToken = null
 let tokenExpireTime = 0
 
-// 请求队列控制 - 严格串行化,每次只允许1个请求
+// 请求队列控制 - 允许适度并发,平衡速度和频率限制
 let activeRequests = 0
-const MAX_CONCURRENT_REQUESTS = 1  // 严格串行:同时只允许1个请求
+const MAX_CONCURRENT_REQUESTS = 3  // 允许3个并发请求
 const requestQueue = []
 
 // 请求间延迟(毫秒) - 每个请求执行前都要等待,确保不会触发频率限制
-const REQUEST_DELAY = 500  // 每个请求开始前等待500ms
+const REQUEST_DELAY = 400  // 每个请求开始前等待400ms
 
 // 获取 tenant_access_token（带缓存）
 async function getTenantAccessToken() {
@@ -86,7 +86,7 @@ async function downloadImage(fileToken, maxRetries = 3) {
               'Authorization': `Bearer ${token}`
             },
             responseType: 'arraybuffer',
-            timeout: 15000 // 15秒超时
+            timeout: 10000 // 10秒超时,避免单个请求卡太久
           }
         )
 
@@ -102,8 +102,8 @@ async function downloadImage(fileToken, maxRetries = 3) {
           if (isLastAttempt) {
             throw error
           }
-          // 频率限制:等待更长时间,使用更激进的退避策略
-          const delay = attempt * 3000  // 3秒,6秒,9秒
+          // 频率限制:使用较短的退避延迟
+          const delay = attempt * 1500  // 1.5秒,3秒,4.5秒
           console.log(`频率限制 (尝试 ${attempt}/${maxRetries}), ${delay}ms 后重试...`)
           await new Promise(resolve => setTimeout(resolve, delay))
           continue

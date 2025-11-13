@@ -3,6 +3,10 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions]
+  # 增加函数超时时间到26秒(Netlify免费版最大值)
+  included_files = ["netlify/functions/**"]
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/feishu-proxy"
