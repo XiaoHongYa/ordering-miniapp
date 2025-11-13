@@ -1,0 +1,36 @@
+# Cloudflare Pages 配置文件
+name = "diancan-miniprogram"
+compatibility_date = "2024-01-01"
+
+# Pages 项目配置
+pages_build_output_dir = "dist"
+
+# 环境变量 (需要在 Cloudflare Dashboard 中配置)
+# Settings > Environment variables
+# 需要添加:
+# - VITE_FEISHU_APP_ID
+# - VITE_FEISHU_APP_SECRET
+
+# Cloudflare Pages Functions 会自动识别 /functions 目录
+# 不需要额外配置
+
+# 可选: 自定义域名
+# [site]
+# bucket = "./dist"
+
+# 可选: 构建配置
+[build]
+command = "npm run build"
+
+# 可选: 兼容性标志
+[compatibility_flags]
+# nodejs_compat = true  # 如果需要 Node.js 兼容性
+
+# 注意事项:
+# 1. HEIC 图片转换功能在 Cloudflare Workers 中受限
+#    - Cloudflare Workers 不支持 heic-convert 库 (需要原生模块)
+#    - 建议使用 Cloudflare Images (付费) 或前端转换
+# 2. 环境变量需要在 Cloudflare Dashboard 配置
+# 3. 部署后 API 路径会自动路由:
+#    - /api/* -> /functions/api/[[path]].js
+#    - /image-proxy -> /functions/image-proxy.js

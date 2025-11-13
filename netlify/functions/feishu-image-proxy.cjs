@@ -1,5 +1,6 @@
 // Netlify Function: 代理飞书附件图片下载
 const axios = require('axios')
+const convert = require('heic-convert')
 
 // Token 缓存（Lambda 容器复用时可以共享）
 let cachedToken = null
@@ -155,7 +156,29 @@ exports.handler = async function(event, context) {
     const imageResponse = await downloadImage(fileToken)
 
     // 获取图片的内容类型
-    const contentType = imageResponse.headers['content-type'] || 'image/jpeg'
+    const originalContentType = imageResponse.headers['content-type'] || 'image/jpeg'
+
+    let imageBuffer = imageResponse.data
+    let contentType = originalContentType
+
+    // 如果是 HEIC/HEIF 格式,转换为 JPEG(浏览器不支持 HEIC)
+    if (originalContentType.includes('heic') || originalContentType.includes('heif')) {
+      console.log(`检测到 HEIC 格式,转换为 JPEG...`)
+      try {
+        // heic-convert 需要 Uint8Array 输入
+        const outputBuffer = await convert({
+          buffer: imageResponse.data,
+          format: 'JPEG',
+          quality: 0.85 // 85% 质量
+        })
+        imageBuffer = Buffer.from(outputBuffer)
+        contentType = 'image/jpeg'
+        console.log(`✅ HEIC 转 JPEG 成功`)
+      } catch (convertError) {
+        console.error('图片转换失败:', convertError.message)
+        // 转换失败,返回原始数据
+      }
+    }
 
     // 返回图片
     return {
@@ -165,7 +188,7 @@ exports.handler = async function(event, context) {
         'Cache-Control': 'public, max-age=86400', // 缓存24小时
         'Access-Control-Allow-Origin': '*'
       },
-      body: imageResponse.data.toString('base64'),
+      body: imageBuffer.toString('base64'),
       isBase64Encoded: true
     }
   } catch (error) {

@@ -12,10 +12,15 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // 代理飞书 API 请求到 Netlify Functions
       '/api': {
-        target: 'https://open.feishu.cn',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        target: 'http://localhost:8888',
+        changeOrigin: true
+      },
+      // 代理图片请求到 Netlify Functions
+      '/image-proxy': {
+        target: 'http://localhost:8888',
+        changeOrigin: true
       }
     }
   }

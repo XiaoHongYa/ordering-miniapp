@@ -303,11 +303,12 @@ export async function getDishes(categoryName) {
       return response.data?.items?.map(item => {
         const parsed = parseRecord(item)
 
-        // 处理附件字段：如果image_url_v2是对象（包含file_token），使用Netlify代理函数
+        // 处理附件字段：如果image_url_v2是对象（包含file_token），使用代理函数
         let imageUrlV2 = null
         if (parsed.image_url_v2 && typeof parsed.image_url_v2 === 'object' && parsed.image_url_v2.file_token) {
-          // 使用 Netlify 函数代理飞书附件下载（需要认证）
-          imageUrlV2 = `/.netlify/functions/feishu-image-proxy?file_token=${parsed.image_url_v2.file_token}`
+          // 使用代理函数下载飞书附件（需要认证）
+          // Cloudflare Pages 会自动路由 /image-proxy 到 functions/image-proxy.js
+          imageUrlV2 = `/image-proxy?file_token=${parsed.image_url_v2.file_token}`
         }
 
         return {

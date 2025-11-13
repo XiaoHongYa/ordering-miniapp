@@ -46,12 +46,16 @@
               :key="dish.id"
               class="dish-card"
             >
-              <div class="dish-image">
+              <div class="dish-image" :class="{ 'no-image': !getDishImageUrl(dish) }">
                 <img
+                  v-if="getDishImageUrl(dish)"
                   :src="getDishImageUrl(dish)"
                   :alt="dish.name"
                   @error="handleImageError($event, dish)"
                 />
+                <div v-else class="placeholder-image">
+                  <van-icon name="photo-o" size="40" color="#ccc" />
+                </div>
               </div>
               <div class="dish-info">
                 <div class="dish-name">{{ dish.name }}</div>
@@ -111,11 +115,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { getAnnouncements, getCategories, getDishes } from '@/api/feishu'
 import { showToast } from 'vant'
+import { loadImage, clearImageCache } from '@/utils/imageLoader'
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -128,6 +133,8 @@ const loading = ref(false)
 const refreshing = ref(false)
 // 记录图片加载失败的菜品，用于切换到备用图片
 const failedImages = ref(new Set())
+// 存储转换后的图片 URL（HEIC -> JPEG）
+const convertedImageUrls = ref(new Map())
 
 // 当前分类的菜品
 const currentDishes = computed(() => {
@@ -202,33 +209,75 @@ const handleCategoryChange = (index) => {
   activeCategory.value = index
 }
 
-// 获取菜品图片 URL
+// 获取菜品图片 URL（支持 HEIC 转换）
 const getDishImageUrl = (dish) => {
   // 如果该菜品的主图片已经加载失败，使用备用图片
   if (failedImages.value.has(dish.id)) {
-    return dish.image_url_v2 || '/default-dish.png'
+    const fallbackUrl = dish.image_url_v2 || ''
+    // 检查是否已转换
+    if (fallbackUrl && convertedImageUrls.value.has(fallbackUrl)) {
+      return convertedImageUrls.value.get(fallbackUrl)
+    }
+    return fallbackUrl
   }
-  // 优先使用 image_url，如果没有则使用 image_url_v2，都没有则使用默认图片
-  return dish.image_url || dish.image_url_v2 || '/default-dish.png'
+
+  // 优先使用 image_url，如果没有则使用 image_url_v2，都没有则返回空字符串
+  const originalUrl = dish.image_url || dish.image_url_v2 || ''
+
+  // 如果已经转换过，返回转换后的 URL
+  if (originalUrl && convertedImageUrls.value.has(originalUrl)) {
+    return convertedImageUrls.value.get(originalUrl)
+  }
+
+  return originalUrl
 }
 
-// 处理图片加载错误 - 直接切换到备用图片或默认图片
-const handleImageError = (event, dish) => {
+// 处理图片加载错误 - 尝试 HEIC 转换或切换备用图片
+const handleImageError = async (event, dish) => {
+  const currentSrc = event.target.src
+
   // 标记该菜品的主图片加载失败
   if (!failedImages.value.has(dish.id)) {
     failedImages.value.add(dish.id)
-    console.log(`图片加载失败,切换备用图片: ${dish.name}`)
+    console.log(`图片加载失败: ${dish.name}, URL: ${currentSrc}`)
 
-    // 如果有备用图片，尝试加载备用图片
+    // 如果是通过代理函数加载的图片（Netlify 或 Cloudflare），
+    // 服务器端应该已经处理了 HEIC 转换，不需要前端再转换
+    const isProxiedImage = currentSrc.includes('image-proxy') ||
+                          currentSrc.includes('feishu-image-proxy')
+
+    // 只有在非代理图片且明确失败时才尝试 HEIC 转换
+    if (!isProxiedImage) {
+      try {
+        console.log(`尝试 HEIC 转换: ${dish.name}`)
+        const convertedUrl = await loadImage(currentSrc)
+
+        if (convertedUrl && convertedUrl !== currentSrc) {
+          // 转换成功，更新图片
+          event.target.src = convertedUrl
+          convertedImageUrls.value.set(currentSrc, convertedUrl)
+          console.log(`✅ HEIC 转换成功: ${dish.name}`)
+          return
+        }
+      } catch (error) {
+        console.warn(`HEIC 转换失败: ${dish.name}`, error)
+      }
+    }
+
+    // HEIC 转换失败或不是 HEIC 格式，尝试备用图片
     if (dish.image_url_v2 && event.target.src.indexOf(dish.image_url_v2) === -1) {
+      console.log(`切换到备用图片: ${dish.name}`)
       event.target.src = dish.image_url_v2
     } else {
-      // 备用图片也失败或没有备用图片，使用默认图片
-      event.target.src = '/default-dish.png'
+      // 没有备用图片,隐藏图片元素
+      event.target.removeAttribute('src')
+      event.target.style.display = 'none'
     }
   } else {
-    // 备用图片也失败了,使用默认图片
-    event.target.src = '/default-dish.png'
+    // 备用图片也失败了,直接隐藏
+    // 不再尝试转换，因为已经尝试过了
+    event.target.removeAttribute('src')
+    event.target.style.display = 'none'
   }
 }
 
@@ -261,6 +310,11 @@ const goToOrderHistory = () => {
 
 onMounted(() => {
   loadData()
+})
+
+// 组件卸载时清理缓存
+onUnmounted(() => {
+  clearImageCache()
 })
 </script>
 
@@ -338,6 +392,20 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.dish-image.no-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .dish-info {
