@@ -5,6 +5,11 @@ const axios = require('axios')
 let cachedToken = null
 let tokenExpireTime = 0
 
+// 请求队列控制
+let activeRequests = 0
+const MAX_CONCURRENT_REQUESTS = 5  // 最多同时5个请求
+const requestQueue = []
+
 // 获取 tenant_access_token（带缓存）
 async function getTenantAccessToken() {
   const now = Date.now()
@@ -34,44 +39,88 @@ async function getTenantAccessToken() {
   return cachedToken
 }
 
-// 下载图片（带重试）
+// 等待队列有空位
+async function waitForSlot() {
+  if (activeRequests < MAX_CONCURRENT_REQUESTS) {
+    activeRequests++
+    return
+  }
+
+  // 等待有空位
+  return new Promise(resolve => {
+    requestQueue.push(resolve)
+  })
+}
+
+// 释放队列空位
+function releaseSlot() {
+  activeRequests--
+  if (requestQueue.length > 0) {
+    const next = requestQueue.shift()
+    activeRequests++
+    next()
+  }
+}
+
+// 下载图片（带重试和队列控制）
 async function downloadImage(fileToken, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const token = await getTenantAccessToken()
+  // 等待队列空位
+  await waitForSlot()
 
-      const imageResponse = await axios.get(
-        `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          responseType: 'arraybuffer',
-          timeout: 10000 // 10秒超时
+  try {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const token = await getTenantAccessToken()
+
+        const imageResponse = await axios.get(
+          `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            responseType: 'arraybuffer',
+            timeout: 15000 // 15秒超时
+          }
+        )
+
+        return imageResponse
+
+      } catch (error) {
+        const isLastAttempt = attempt === maxRetries
+        const status = error.response?.status
+        const errorCode = error.response?.data ? JSON.parse(error.response.data.toString()).code : null
+
+        // 频率限制错误(99991400),延长等待时间后重试
+        if (errorCode === 99991400) {
+          if (isLastAttempt) {
+            throw error
+          }
+          // 频率限制:等待更长时间
+          const delay = attempt * 2000  // 2秒,4秒,6秒
+          console.log(`频率限制 (尝试 ${attempt}/${maxRetries}), ${delay}ms 后重试...`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+          continue
         }
-      )
 
-      return imageResponse
+        // 如果是 401/403/404 错误，不重试（这些是永久错误）
+        if (status === 401 || status === 403 || status === 404) {
+          throw error
+        }
 
-    } catch (error) {
-      const isLastAttempt = attempt === maxRetries
-      const status = error.response?.status
+        // 如果是最后一次尝试，抛出错误
+        if (isLastAttempt) {
+          throw error
+        }
 
-      // 如果是 400/401/403/404 错误，不重试（这些是永久错误）
-      if (status === 400 || status === 401 || status === 403 || status === 404) {
-        throw error
+        // 其他错误:指数退避
+        const delay = attempt * 500
+        console.log(`下载失败 (尝试 ${attempt}/${maxRetries}), ${delay}ms 后重试...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
       }
-
-      // 如果是最后一次尝试，抛出错误
-      if (isLastAttempt) {
-        throw error
-      }
-
-      // 指数退避：等待 attempt * 500ms 后重试
-      const delay = attempt * 500
-      console.log(`下载失败 (尝试 ${attempt}/${maxRetries}), ${delay}ms 后重试...`)
-      await new Promise(resolve => setTimeout(resolve, delay))
     }
+  } finally {
+    // 无论成功失败，都要释放队列空位
+    releaseSlot()
   }
 }
 
