@@ -27,6 +27,7 @@ export const useCartStore = defineStore('cart', () => {
         name: dish.name,
         price: dish.price,
         image_url: dish.image_url,
+        image_url_v2: dish.image_url_v2, // 添加备用图片字段
         quantity: 1
       })
     }

@@ -24,7 +24,11 @@
           class="cart-item"
         >
           <div class="item-image">
-            <img :src="item.image_url || '/default-dish.png'" :alt="item.name" />
+            <img
+              :src="getItemImageUrl(item)"
+              :alt="item.name"
+              @error="handleImageError($event, item)"
+            />
           </div>
 
           <div class="item-info">
@@ -78,6 +82,33 @@ const cartStore = useCartStore()
 const userStore = useUserStore()
 
 const submitting = ref(false)
+// 记录图片加载失败的商品
+const failedImages = ref(new Set())
+
+// 获取商品图片 URL
+const getItemImageUrl = (item) => {
+  // 如果该商品的主图片已经加载失败，使用备用图片
+  if (failedImages.value.has(item.id)) {
+    return item.image_url_v2 || '/default-dish.png'
+  }
+  // 优先使用 image_url，如果没有则使用 image_url_v2，都没有则使用默认图片
+  return item.image_url || item.image_url_v2 || '/default-dish.png'
+}
+
+// 处理图片加载错误
+const handleImageError = (event, item) => {
+  // 标记该商品的主图片加载失败
+  if (!failedImages.value.has(item.id)) {
+    failedImages.value.add(item.id)
+    // 如果有备用图片，尝试加载备用图片
+    if (item.image_url_v2 && event.target.src !== item.image_url_v2) {
+      event.target.src = item.image_url_v2
+    } else {
+      // 备用图片也失败或没有备用图片，使用默认图片
+      event.target.src = '/default-dish.png'
+    }
+  }
+}
 
 // 返回上一页
 const goBack = () => {

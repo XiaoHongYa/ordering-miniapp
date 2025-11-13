@@ -47,7 +47,11 @@
               class="dish-card"
             >
               <div class="dish-image">
-                <img :src="dish.image_url || '/default-dish.png'" :alt="dish.name" />
+                <img
+                  :src="getDishImageUrl(dish)"
+                  :alt="dish.name"
+                  @error="handleImageError($event, dish)"
+                />
               </div>
               <div class="dish-info">
                 <div class="dish-name">{{ dish.name }}</div>
@@ -122,6 +126,8 @@ const allDishes = ref([])
 const activeCategory = ref(0)
 const loading = ref(false)
 const refreshing = ref(false)
+// 记录图片加载失败的菜品，用于切换到备用图片
+const failedImages = ref(new Set())
 
 // 当前分类的菜品
 const currentDishes = computed(() => {
@@ -194,6 +200,31 @@ const onRefresh = async () => {
 // 切换分类
 const handleCategoryChange = (index) => {
   activeCategory.value = index
+}
+
+// 获取菜品图片 URL
+const getDishImageUrl = (dish) => {
+  // 如果该菜品的主图片已经加载失败，使用备用图片
+  if (failedImages.value.has(dish.id)) {
+    return dish.image_url_v2 || '/default-dish.png'
+  }
+  // 优先使用 image_url，如果没有则使用 image_url_v2，都没有则使用默认图片
+  return dish.image_url || dish.image_url_v2 || '/default-dish.png'
+}
+
+// 处理图片加载错误
+const handleImageError = (event, dish) => {
+  // 标记该菜品的主图片加载失败
+  if (!failedImages.value.has(dish.id)) {
+    failedImages.value.add(dish.id)
+    // 如果有备用图片，尝试加载备用图片
+    if (dish.image_url_v2 && event.target.src !== dish.image_url_v2) {
+      event.target.src = dish.image_url_v2
+    } else {
+      // 备用图片也失败或没有备用图片，使用默认图片
+      event.target.src = '/default-dish.png'
+    }
+  }
 }
 
 // 添加商品

@@ -53,6 +53,12 @@ function parseFieldValue(value) {
     return value.link_record_ids
   }
 
+  // 附件字段: [{"file_token":"xxx","name":"xxx","size":123,"tmp_url":"xxx","type":"xxx","url":"xxx"}]
+  // 对于附件字段，返回第一个附件的临时URL
+  if (Array.isArray(value) && value.length > 0 && value[0].file_token) {
+    return value[0].tmp_url || value[0].url
+  }
+
   // 如果是数组格式 [{"text":"xxx","type":"text"}]
   if (Array.isArray(value) && value.length > 0) {
     if (value[0].text !== undefined) {
@@ -298,6 +304,7 @@ export async function getDishes(categoryName) {
           description: parsed.description,
           price: parsed.price,
           image_url: parsed.image_url,
+          image_url_v2: parsed.image_url_v2, // 附件字段作为备用图片
           category_id: parsed.category_id // 现在是数组格式 ["recXXX"]
         }
       }) || []
