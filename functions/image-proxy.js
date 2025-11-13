@@ -208,22 +208,40 @@ export async function onRequest(context) {
     }
 
     const token = tokenData.tenant_access_token
-    console.log('Step 2: Got token, downloading image...')
+    console.log('Step 2: Got token (preview):', token.substring(0, 20) + '...')
+    console.log('Step 2: Downloading image with file_token:', fileToken)
+
+    // 尝试使用飞书附件下载 API
+    // 飞书有两个下载接口:
+    // 1. /drive/v1/medias/${file_token}/download - 用于下载上传的附件
+    // 2. /drive/v1/files/${file_token}/download - 用于下载云文档中的文件
+    // 我们先尝试 medias 接口
+    const downloadUrl = `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`
+    console.log('Step 2: Download URL:', downloadUrl)
 
     // 下载附件
-    const imageResponse = await fetch(
-      `https://open.feishu.cn/open-apis/drive/v1/medias/${fileToken}/download`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+    const imageResponse = await fetch(downloadUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`
       }
-    )
+    })
+
+    console.log('Step 2: Image response status:', imageResponse.status)
+    console.log('Step 2: Image response headers:', JSON.stringify(Object.fromEntries(imageResponse.headers.entries()), null, 2))
 
     console.log('Image response status:', imageResponse.status)
 
     if (!imageResponse.ok) {
-      throw new Error(`HTTP ${imageResponse.status}: ${imageResponse.statusText}`)
+      // 如果下载失败,尝试读取错误响应内容
+      let errorDetail = imageResponse.statusText
+      try {
+        const errorBody = await imageResponse.text()
+        console.log('Step 2: Error response body:', errorBody)
+        errorDetail = errorBody || errorDetail
+      } catch (e) {
+        console.log('Step 2: Could not read error body')
+      }
+      throw new Error(`HTTP ${imageResponse.status}: ${errorDetail}`)
     }
 
     // 获取图片的内容类型
