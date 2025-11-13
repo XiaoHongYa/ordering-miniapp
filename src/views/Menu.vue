@@ -212,14 +212,39 @@ const getDishImageUrl = (dish) => {
   return dish.image_url || dish.image_url_v2 || '/default-dish.png'
 }
 
-// 处理图片加载错误
+// 记录每个图片的重试次数
+const imageRetryCount = ref(new Map())
+
+// 处理图片加载错误 - 带重试机制
 const handleImageError = (event, dish) => {
-  // 标记该菜品的主图片加载失败
+  const currentRetries = imageRetryCount.value.get(dish.id) || 0
+  const maxRetries = 2 // 最多重试2次
+
+  // 如果还没有达到重试上限,等待后重新尝试加载同一个URL
+  if (currentRetries < maxRetries) {
+    imageRetryCount.value.set(dish.id, currentRetries + 1)
+    console.log(`图片加载失败,第 ${currentRetries + 1} 次重试: ${dish.name}`)
+
+    // 等待一段时间后重试(避免立即重试)
+    setTimeout(() => {
+      // 强制重新加载(添加时间戳防止缓存)
+      const timestamp = Date.now()
+      const originalSrc = event.target.src.split('?')[0] // 移除旧的时间戳
+      event.target.src = `${originalSrc}?retry=${timestamp}`
+    }, 1000 * (currentRetries + 1)) // 递增延迟: 1秒, 2秒, 3秒
+    return
+  }
+
+  // 重试次数用完后,尝试使用备用图片
   if (!failedImages.value.has(dish.id)) {
     failedImages.value.add(dish.id)
+    console.log(`图片加载最终失败,切换备用图片: ${dish.name}`)
+
     // 如果有备用图片，尝试加载备用图片
     if (dish.image_url_v2 && event.target.src !== dish.image_url_v2) {
       event.target.src = dish.image_url_v2
+      // 重置重试计数
+      imageRetryCount.value.set(dish.id, 0)
     } else {
       // 备用图片也失败或没有备用图片，使用默认图片
       event.target.src = '/default-dish.png'
