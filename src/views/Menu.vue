@@ -121,6 +121,7 @@ import { useCartStore } from '@/stores/cart'
 import { getAnnouncements, getCategories, getDishes } from '@/api/feishu'
 import { showToast } from 'vant'
 import { loadImage, clearImageCache } from '@/utils/imageLoader'
+import imageQueue from '@/utils/imageQueue'
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -232,7 +233,7 @@ const getDishImageUrl = (dish) => {
   return originalUrl
 }
 
-// 处理图片加载错误 - 尝试 HEIC 转换或切换备用图片
+// 处理图片加载错误 - 使用队列管理器加载图片
 const handleImageError = async (event, dish) => {
   const currentSrc = event.target.src
 
@@ -241,27 +242,31 @@ const handleImageError = async (event, dish) => {
     failedImages.value.add(dish.id)
     console.log(`图片加载失败: ${dish.name}, URL: ${currentSrc}`)
 
-    // 尝试 HEIC 转换（无论是否是代理图片）
-    // 因为 Cloudflare image-proxy 会返回 HEIC 原始数据，需要前端转换
+    // 使用队列管理器重新加载图片（会自动处理 HEIC 转换和频率限制）
     try {
-      console.log(`尝试 HEIC 转换: ${dish.name}`)
-      const convertedUrl = await loadImage(currentSrc)
+      console.log(`通过队列重新加载: ${dish.name}`)
+      const loadedUrl = await imageQueue.loadImage(currentSrc, event.target)
 
-      if (convertedUrl && convertedUrl !== currentSrc) {
-        // 转换成功，更新图片
-        event.target.src = convertedUrl
-        convertedImageUrls.value.set(currentSrc, convertedUrl)
-        console.log(`✅ HEIC 转换成功: ${dish.name}`)
+      if (loadedUrl) {
+        convertedImageUrls.value.set(currentSrc, loadedUrl)
+        console.log(`✅ 图片加载成功: ${dish.name}`)
         return
       }
     } catch (error) {
-      console.warn(`HEIC 转换失败: ${dish.name}`, error)
+      console.warn(`队列加载失败: ${dish.name}`, error)
     }
 
-    // HEIC 转换失败，尝试备用图片
+    // 队列加载失败，尝试备用图片
     if (dish.image_url_v2 && event.target.src.indexOf(dish.image_url_v2) === -1) {
       console.log(`切换到备用图片: ${dish.name}`)
-      event.target.src = dish.image_url_v2
+      // 备用图片也通过队列加载
+      try {
+        await imageQueue.loadImage(dish.image_url_v2, event.target)
+      } catch (error) {
+        // 备用图片也失败
+        event.target.removeAttribute('src')
+        event.target.style.display = 'none'
+      }
     } else {
       // 没有备用图片,隐藏图片元素
       event.target.removeAttribute('src')
@@ -269,7 +274,6 @@ const handleImageError = async (event, dish) => {
     }
   } else {
     // 备用图片也失败了,直接隐藏
-    // 不再尝试转换，因为已经尝试过了
     event.target.removeAttribute('src')
     event.target.style.display = 'none'
   }
