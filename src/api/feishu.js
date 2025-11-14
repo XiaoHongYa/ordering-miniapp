@@ -308,7 +308,12 @@ export async function getDishes(categoryName) {
         if (parsed.image_url_v2 && typeof parsed.image_url_v2 === 'object' && parsed.image_url_v2.file_token) {
           // 使用代理函数下载飞书附件（需要认证）
           // Cloudflare Pages 会自动路由 /image-proxy 到 functions/image-proxy.js
-          imageUrlV2 = `/image-proxy?file_token=${parsed.image_url_v2.file_token}`
+          const fileToken = parsed.image_url_v2.file_token
+
+          // 支持所有图片格式（包括 HEIC）
+          // 后端代理会保持原始格式，前端浏览器自行处理
+          // Safari 原生支持 HEIC，Chrome/Firefox 会显示占位符
+          imageUrlV2 = `/image-proxy?file_token=${fileToken}`
         }
 
         return {

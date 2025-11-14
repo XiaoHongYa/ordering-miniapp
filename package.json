@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:functions": "wrangler pages dev dist --local --port 8788",
+    "dev:full": "npm run build && wrangler pages dev dist --local --port 8788",
     "build": "vite build",
     "preview": "vite preview",
     "init-data": "node scripts/init-data.js"
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
-    "vite": "^5.0.8"
+    "vite": "^5.0.8",
+    "wrangler": "^4.48.0"
   }
 }

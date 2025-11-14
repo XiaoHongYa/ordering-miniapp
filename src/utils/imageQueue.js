@@ -71,28 +71,50 @@ class ImageQueue {
    * @returns {Promise<string>} - 加载成功的 URL
    */
   async tryLoadImage(url) {
-    return new Promise((resolve, reject) => {
-      const img = new Image()
+    try {
+      // 优化：检查 URL 中的 format 参数，避免不必要的 HEAD 请求
+      const urlObj = new URL(url, window.location.origin)
+      const format = urlObj.searchParams.get('format')
 
-      img.onload = () => {
-        resolve(url)
+      // 如果 URL 明确标记为 HEIC，直接转换
+      if (format === 'heic') {
+        console.log('检测到 HEIC 格式（通过 URL 参数），直接转换:', url)
+        const { loadImage: convertHeic } = await import('@/utils/imageLoader')
+        const convertedUrl = await convertHeic(url)
+        return convertedUrl
       }
 
-      img.onerror = async () => {
-        // 如果是代理图片失败，可能是 HEIC 格式
-        // 尝试转换
-        try {
-          const { loadImage: convertHeic } = await import('@/utils/imageLoader')
-          const convertedUrl = await convertHeic(url)
-          resolve(convertedUrl)
-        } catch (error) {
-          console.warn('图片加载失败:', url, error)
-          reject(error)
+      // 如果 URL 标记为标准格式（JPEG/PNG），直接返回，不需要转换
+      if (format === 'standard') {
+        return url
+      }
+
+      // 没有 format 参数的情况（旧数据或外部 URL），正常加载
+      return await new Promise((resolve, reject) => {
+        const img = new Image()
+
+        img.onload = () => {
+          resolve(url)
         }
-      }
 
-      img.src = url
-    })
+        img.onerror = async () => {
+          // 降级方案：如果加载失败，尝试作为 HEIC 处理
+          try {
+            const { loadImage: convertHeic } = await import('@/utils/imageLoader')
+            const convertedUrl = await convertHeic(url)
+            resolve(convertedUrl)
+          } catch (error) {
+            console.warn('图片加载失败:', url, error)
+            reject(error)
+          }
+        }
+
+        img.src = url
+      })
+    } catch (error) {
+      console.warn('图片加载失败:', url, error)
+      throw error
+    }
   }
 
   /**

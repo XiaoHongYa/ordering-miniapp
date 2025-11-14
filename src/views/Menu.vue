@@ -51,9 +51,9 @@
                   v-if="getDishImageUrl(dish)"
                   :src="getDishImageUrl(dish)"
                   :alt="dish.name"
-                  @error="handleImageError($event, dish)"
+                  @error="handleImageError"
                 />
-                <div v-else class="placeholder-image">
+                <div class="placeholder-image">
                   <van-icon name="photo-o" size="40" color="#ccc" />
                 </div>
               </div>
@@ -120,8 +120,7 @@ import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { getAnnouncements, getCategories, getDishes } from '@/api/feishu'
 import { showToast } from 'vant'
-import { loadImage, clearImageCache } from '@/utils/imageLoader'
-import imageQueue from '@/utils/imageQueue'
+// HEIC 转换功能已移除，仅展示标准格式图片
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -132,10 +131,6 @@ const allDishes = ref([])
 const activeCategory = ref(0)
 const loading = ref(false)
 const refreshing = ref(false)
-// 记录图片加载失败的菜品，用于切换到备用图片
-const failedImages = ref(new Set())
-// 存储转换后的图片 URL（HEIC -> JPEG）
-const convertedImageUrls = ref(new Map())
 
 // 当前分类的菜品
 const currentDishes = computed(() => {
@@ -210,73 +205,17 @@ const handleCategoryChange = (index) => {
   activeCategory.value = index
 }
 
-// 获取菜品图片 URL（支持 HEIC 转换）
+// 获取菜品图片 URL（支持所有格式，包括 HEIC）
 const getDishImageUrl = (dish) => {
-  // 如果该菜品的主图片已经加载失败，使用备用图片
-  if (failedImages.value.has(dish.id)) {
-    const fallbackUrl = dish.image_url_v2 || ''
-    // 检查是否已转换
-    if (fallbackUrl && convertedImageUrls.value.has(fallbackUrl)) {
-      return convertedImageUrls.value.get(fallbackUrl)
-    }
-    return fallbackUrl
-  }
-
-  // 优先使用 image_url，如果没有则使用 image_url_v2，都没有则返回空字符串
-  const originalUrl = dish.image_url || dish.image_url_v2 || ''
-
-  // 如果已经转换过，返回转换后的 URL
-  if (originalUrl && convertedImageUrls.value.has(originalUrl)) {
-    return convertedImageUrls.value.get(originalUrl)
-  }
-
-  return originalUrl
+  // 优先使用 image_url，如果没有则使用 image_url_v2
+  // image_url_v2 通过后端代理获取，支持 HEIC 等需要认证的附件格式
+  return dish.image_url || dish.image_url_v2 || ''
 }
 
-// 处理图片加载错误 - 使用队列管理器加载图片
-const handleImageError = async (event, dish) => {
-  const currentSrc = event.target.src
-
-  // 标记该菜品的主图片加载失败
-  if (!failedImages.value.has(dish.id)) {
-    failedImages.value.add(dish.id)
-    console.log(`图片加载失败: ${dish.name}, URL: ${currentSrc}`)
-
-    // 使用队列管理器重新加载图片（会自动处理 HEIC 转换和频率限制）
-    try {
-      console.log(`通过队列重新加载: ${dish.name}`)
-      const loadedUrl = await imageQueue.loadImage(currentSrc, event.target)
-
-      if (loadedUrl) {
-        convertedImageUrls.value.set(currentSrc, loadedUrl)
-        console.log(`✅ 图片加载成功: ${dish.name}`)
-        return
-      }
-    } catch (error) {
-      console.warn(`队列加载失败: ${dish.name}`, error)
-    }
-
-    // 队列加载失败，尝试备用图片
-    if (dish.image_url_v2 && event.target.src.indexOf(dish.image_url_v2) === -1) {
-      console.log(`切换到备用图片: ${dish.name}`)
-      // 备用图片也通过队列加载
-      try {
-        await imageQueue.loadImage(dish.image_url_v2, event.target)
-      } catch (error) {
-        // 备用图片也失败
-        event.target.removeAttribute('src')
-        event.target.style.display = 'none'
-      }
-    } else {
-      // 没有备用图片,隐藏图片元素
-      event.target.removeAttribute('src')
-      event.target.style.display = 'none'
-    }
-  } else {
-    // 备用图片也失败了,直接隐藏
-    event.target.removeAttribute('src')
-    event.target.style.display = 'none'
-  }
+// 处理图片加载错误（浏览器不支持的格式会显示占位符）
+const handleImageError = (event) => {
+  // 图片加载失败（如 Chrome/Firefox 不支持 HEIC），隐藏图片，显示占位符
+  event.target.style.display = 'none'
 }
 
 // 添加商品
@@ -308,11 +247,6 @@ const goToOrderHistory = () => {
 
 onMounted(() => {
   loadData()
-})
-
-// 组件卸载时清理缓存
-onUnmounted(() => {
-  clearImageCache()
 })
 </script>
 
@@ -384,12 +318,25 @@ onUnmounted(() => {
   background-color: #f5f5f5;
   flex-shrink: 0;
   border-radius: 8px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .dish-image img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  z-index: 2;
+}
+
+/* 图片加载失败时隐藏，显示占位符 */
+.dish-image img[style*="display: none"] {
+  z-index: 0;
 }
 
 .dish-image.no-image {
@@ -404,6 +351,7 @@ onUnmounted(() => {
   justify-content: center;
   width: 100%;
   height: 100%;
+  z-index: 1;
 }
 
 .dish-info {

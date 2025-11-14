@@ -12,14 +12,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // 代理飞书 API 请求到 Netlify Functions
+      // 代理飞书 API 请求到 Cloudflare Pages Functions (Wrangler)
       '/api': {
-        target: 'http://localhost:8888',
+        target: 'http://localhost:8788',
         changeOrigin: true
       },
-      // 代理图片请求到 Netlify Functions
+      // 代理图片请求到 Cloudflare Pages Functions (Wrangler)
       '/image-proxy': {
-        target: 'http://localhost:8888',
+        target: 'http://localhost:8788',
         changeOrigin: true
       }
     }

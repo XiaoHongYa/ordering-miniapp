@@ -27,8 +27,11 @@
             <img
               :src="getItemImageUrl(item)"
               :alt="item.name"
-              @error="handleImageError($event, item)"
+              @error="handleImageError"
             />
+            <div class="placeholder-image">
+              <van-icon name="photo-o" size="32" color="#ccc" />
+            </div>
           </div>
 
           <div class="item-info">
@@ -85,29 +88,17 @@ const submitting = ref(false)
 // 记录图片加载失败的商品
 const failedImages = ref(new Set())
 
-// 获取商品图片 URL
+// 获取商品图片 URL（支持所有格式，包括 HEIC）
 const getItemImageUrl = (item) => {
-  // 如果该商品的主图片已经加载失败，使用备用图片
-  if (failedImages.value.has(item.id)) {
-    return item.image_url_v2 || '/default-dish.png'
-  }
-  // 优先使用 image_url，如果没有则使用 image_url_v2，都没有则使用默认图片
-  return item.image_url || item.image_url_v2 || '/default-dish.png'
+  // 优先使用 image_url，如果没有则使用 image_url_v2
+  // image_url_v2 通过后端代理获取，支持 HEIC 等需要认证的附件格式
+  return item.image_url || item.image_url_v2 || ''
 }
 
-// 处理图片加载错误
-const handleImageError = (event, item) => {
-  // 标记该商品的主图片加载失败
-  if (!failedImages.value.has(item.id)) {
-    failedImages.value.add(item.id)
-    // 如果有备用图片，尝试加载备用图片
-    if (item.image_url_v2 && event.target.src !== item.image_url_v2) {
-      event.target.src = item.image_url_v2
-    } else {
-      // 备用图片也失败或没有备用图片，使用默认图片
-      event.target.src = '/default-dish.png'
-    }
-  }
+// 处理图片加载错误（浏览器不支持的格式会显示占位符）
+const handleImageError = (event) => {
+  // 图片加载失败（如 Chrome/Firefox 不支持 HEIC），隐藏图片，显示占位符
+  event.target.style.display = 'none'
 }
 
 // 返回上一页
@@ -248,12 +239,34 @@ const handleCheckout = async () => {
   border-radius: 6px;
   overflow: hidden;
   background-color: #f5f5f5;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .item-image img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  z-index: 2;
+}
+
+/* 图片加载失败时隐藏，显示占位符 */
+.item-image img[style*="display: none"] {
+  z-index: 0;
+}
+
+.placeholder-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
 
 .item-info {
