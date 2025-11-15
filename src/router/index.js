@@ -34,6 +34,12 @@ const routes = [
     name: 'OrderHistory',
     component: () => import('@/views/OrderHistory.vue'),
     meta: { title: '历史订单', requiresAuth: true }
+  },
+  {
+    path: '/lottery',
+    name: 'Lottery',
+    component: () => import('@/views/Lottery.vue'),
+    meta: { title: '幸运抽奖', requiresAuth: true }
   }
 ]
 

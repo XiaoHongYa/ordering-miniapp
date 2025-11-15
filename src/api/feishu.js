@@ -11,7 +11,9 @@ const TABLES = {
   CATEGORIES: import.meta.env.VITE_FEISHU_CATEGORIES_TABLE_ID,
   DISHES: import.meta.env.VITE_FEISHU_DISHES_TABLE_ID,
   ORDERS: import.meta.env.VITE_FEISHU_ORDERS_TABLE_ID,
-  ORDER_DETAILS: import.meta.env.VITE_FEISHU_ORDER_DETAILS_TABLE_ID
+  ORDER_DETAILS: import.meta.env.VITE_FEISHU_ORDER_DETAILS_TABLE_ID,
+  PRIZE: import.meta.env.VITE_FEISHU_PRIZE_TABLE_ID,
+  LOTTERY_RECORD: import.meta.env.VITE_FEISHU_LOTTERY_RECORD_TABLE_ID
 }
 
 // 获取tenant_access_token
@@ -446,6 +448,172 @@ export async function getOrderHistory(username) {
     return []
   } catch (error) {
     console.error('获取历史订单失败:', error)
+    return []
+  }
+}
+
+// ==================== 抽奖功能 ====================
+
+// 获取奖品列表
+export async function getPrizes() {
+  try {
+    const response = await searchRecords(TABLES.PRIZE, {
+      filter: {
+        conjunction: 'and',
+        conditions: [
+          {
+            field_name: 'status',
+            operator: 'is',
+            value: ['启用']
+          }
+        ]
+      },
+      sort: [
+        {
+          field_name: 'sort_order',
+          desc: false
+        }
+      ]
+    })
+
+    if (response.code === 0) {
+      return response.data?.items?.map(item => {
+        const parsed = parseRecord(item)
+
+        // 处理 prize_img 附件字段
+        let prizeImg = null
+        if (parsed.prize_img && typeof parsed.prize_img === 'object' && parsed.prize_img.file_token) {
+          prizeImg = `/image-proxy?file_token=${parsed.prize_img.file_token}`
+        }
+
+        return {
+          id: parsed.id,
+          name: parsed.prize_name,
+          icon: parsed.prize_icon,
+          img: prizeImg,
+          probability: parsed.win_probability,
+          sortOrder: parsed.sort_order
+        }
+      }) || []
+    }
+    return []
+  } catch (error) {
+    console.error('获取奖品列表失败:', error)
+    return []
+  }
+}
+
+// 执行抽奖
+export async function drawLottery(username) {
+  try {
+    // 1. 获取所有启用的奖品
+    const prizes = await getPrizes()
+
+    if (prizes.length === 0) {
+      return {
+        success: false,
+        message: '暂无可用奖品'
+      }
+    }
+
+    // 2. 根据概率随机选择奖品
+    const totalProbability = prizes.reduce((sum, prize) => sum + prize.probability, 0)
+    const random = Math.random() * totalProbability
+
+    let cumulative = 0
+    let selectedPrize = null
+
+    for (const prize of prizes) {
+      cumulative += prize.probability
+      if (random < cumulative) {
+        selectedPrize = prize
+        break
+      }
+    }
+
+    // 如果没有选中（理论上不会发生），默认选最后一个
+    if (!selectedPrize) {
+      selectedPrize = prizes[prizes.length - 1]
+    }
+
+    // 3. 创建抽奖记录 - 存储 prize_id (奖品的 record_id)
+    const recordResponse = await createRecord(TABLES.LOTTERY_RECORD, {
+      username: username,
+      prize_id: selectedPrize.id,
+      prize_name: selectedPrize.name
+    })
+
+    if (recordResponse.code === 0) {
+      return {
+        success: true,
+        prize: selectedPrize,
+        message: `恭喜获得 ${selectedPrize.name}！`
+      }
+    } else {
+      return {
+        success: false,
+        message: '抽奖失败，请稍后重试'
+      }
+    }
+  } catch (error) {
+    console.error('抽奖失败:', error)
+    return {
+      success: false,
+      message: '抽奖失败，请稍后重试'
+    }
+  }
+}
+
+// 获取用户抽奖记录
+export async function getLotteryRecords(username) {
+  try {
+    const response = await searchRecords(TABLES.LOTTERY_RECORD, {
+      filter: {
+        conjunction: 'and',
+        conditions: [
+          {
+            field_name: 'username',
+            operator: 'is',
+            value: [username]
+          }
+        ]
+      },
+      sort: [
+        {
+          field_name: 'lottery_time',
+          desc: true
+        }
+      ]
+    })
+
+    if (response.code === 0 && response.data?.items) {
+      // 获取所有奖品信息用于匹配
+      const allPrizes = await getPrizes()
+
+      // 将奖品按 ID 组织成 Map 方便查找
+      const prizeMap = new Map()
+      allPrizes.forEach(prize => {
+        prizeMap.set(prize.id, prize)
+      })
+
+      return response.data.items.map(item => {
+        const parsed = parseRecord(item)
+
+        // 根据 prize_id 从奖品表获取最新的图片信息
+        const prize = prizeMap.get(parsed.prize_id)
+
+        return {
+          id: parsed.id,
+          prizeName: parsed.prize_name,
+          prizeIcon: prize?.icon || null,
+          prizeImg: prize?.img || null,
+          lotteryTime: parsed.lottery_time
+        }
+      })
+    }
+    return []
+  } catch (error) {
+    console.error('获取抽奖记录失败:', error)
     return []
   }
 }

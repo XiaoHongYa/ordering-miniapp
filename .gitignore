@@ -27,6 +27,11 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.dev.vars
+
+# Wrangler
+.wrangler/
+wrangler.toml
 
 # Documentation files (keep only README)
 产品文档.md
@@ -38,6 +43,12 @@ dist-ssr
 部署完成总结.md
 项目完成总结.md
 飞书Wiki权限配置指南.md
+CLOUDFLARE_TOKEN_FIX.md
+cloudflare-env-vars.txt
+
+# Diagnostic scripts
+scripts/diagnose-token.js
+scripts/diagnose-wiki-access.js
 
 # Local Netlify folder
 .netlify

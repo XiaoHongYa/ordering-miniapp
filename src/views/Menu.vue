@@ -3,7 +3,10 @@
     <!-- 顶部导航栏 -->
     <van-nav-bar title="点餐菜单" fixed>
       <template #right>
-        <van-icon name="orders-o" size="18" @click="goToOrderHistory" />
+        <div class="nav-icons">
+          <van-icon name="gift-o" size="18" @click="goToLottery" />
+          <van-icon name="orders-o" size="18" @click="goToOrderHistory" />
+        </div>
       </template>
     </van-nav-bar>
 
@@ -111,6 +114,7 @@
         </van-button>
       </div>
     </div>
+
   </div>
 </template>
 
@@ -245,6 +249,11 @@ const goToOrderHistory = () => {
   router.push('/order-history')
 }
 
+// 去抽奖页面
+const goToLottery = () => {
+  router.push('/lottery')
+}
+
 onMounted(() => {
   loadData()
 })
@@ -266,6 +275,21 @@ onMounted(() => {
 
 :deep(.van-nav-bar__right) {
   cursor: pointer;
+}
+
+.nav-icons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-icons .van-icon {
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.nav-icons .van-icon:active {
+  opacity: 0.6;
 }
 
 .menu-content {
